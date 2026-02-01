@@ -1,0 +1,27 @@
+# Environment files (secrets)
+.env
+
+# Documents
+*.doc
+*.docx
+
+# Build outputs
+**/bin/
+**/obj/
+
+# IDE folders
+.vs/
+.vscode/
+.idea/
+
+# User files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+**/packages/
+
+# Test results
+**/TestResults/

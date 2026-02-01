@@ -1,0 +1,44 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# IDE folders
+**/.vs/
+**/.vscode/
+**/.idea/
+
+# User files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+**/packages/
+
+# Test results
+**/TestResults/
+
+# Windows Forms (not needed in container)
+ProductsSales.WinForms/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Environment files
+.env
+*.env
+
+# Logs
+logs/
+*.log
+
+# Documentation
+*.md
+*.docx

@@ -1,0 +1,49 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: productssales-db
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${DB_PASSWORD:-ProductsSales123!}
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - productssales-network
+    restart: unless-stopped
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${DB_PASSWORD:-ProductsSales123!}" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  productssales-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: productssales-api
+    ports:
+      - "5134:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=ProductsSalesDb;User Id=sa;Password=${DB_PASSWORD:-ProductsSales123!};TrustServerCertificate=True;MultipleActiveResultSets=true
+      - Jwt__SecretKey=${JWT_SECRET_KEY:-ProductsSales_SecretKey_Minimum_32_Characters_Long_For_HS256}
+      - Jwt__Issuer=ProductsSales.Api
+      - Jwt__Audience=ProductsSales.Client
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - productssales-network
+    restart: unless-stopped
+
+networks:
+  productssales-network:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
