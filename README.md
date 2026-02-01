@@ -11,6 +11,8 @@ Aplicación de escritorio para la gestión de productos y ventas, con API REST y
 - **Patrón de resiliencia** (Polly): reintentos automáticos y circuit breaker para llamadas HTTP
 - **Docker** y Docker Compose para despliegue
 - **Interfaz MDI** (Multiple Document Interface) en Windows Forms
+- **Pruebas unitarias** con xUnit, Moq y FluentAssertions
+- **Infraestructura como Código (IaC)** con Bicep para Azure
 
 ## Tecnologías
 
@@ -22,16 +24,20 @@ Aplicación de escritorio para la gestión de productos y ventas, con API REST y
 | Autenticación| JWT, BCrypt             |
 | Validación   | FluentValidation        |
 | Resiliencia  | Polly (Retry, Circuit Breaker) |
+| Pruebas      | xUnit, Moq, FluentAssertions  |
+| IaC          | Bicep (Azure)                 |
 
 ## Arquitectura
 
 ```
 ProductsSales/
-├── ProductsSales.Domain/       # Entidades y lógica de dominio
-├── ProductsSales.Application/  # Servicios, DTOs, validadores e interfaces
+├── ProductsSales.Domain/         # Entidades y lógica de dominio
+├── ProductsSales.Application/    # Servicios, DTOs, validadores e interfaces
 ├── ProductsSales.Infrastructure/ # DbContext, repositorios, seguridad
-├── ProductsSales.Api/          # API REST (controladores, middlewares)
-└── ProductsSales.WinForms/     # Cliente de escritorio Windows
+├── ProductsSales.Api/            # API REST (controladores, middlewares)
+├── ProductsSales.WinForms/       # Cliente de escritorio Windows
+├── ProductsSales.Tests/          # Pruebas unitarias
+└── infrastructure/bicep/         # IaC para Azure (Bicep)
 ```
 
 ## Requisitos previos
@@ -54,16 +60,44 @@ ProductsSales/
 
 3. **Ejecutar la API**
    ```bash
-   cd ProductsSales.Api
-   dotnet run
+   cd c:\ProductSales\ProductsSales
+   dotnet run --project ProductsSales.Api
    ```
    - La API estará disponible en `http://localhost:5134`
    - Swagger: `http://localhost:5134/swagger`
 
 4. **Ejecutar la aplicación de escritorio**
    ```bash
-   cd ProductsSales.WinForms
-   dotnet run
+   cd c:\ProductSales\ProductsSales
+   dotnet run --project ProductsSales.WinForms
+   ```
+
+### Opción 1b: Conexión a Azure SQL
+
+Si despliegas la base de datos en Azure con Bicep (ver `infrastructure/bicep/README.md`):
+
+1. **Configurar la cadena de conexión** en `ProductsSales.Api/appsettings.json`:
+   ```json
+   "ConnectionStrings": {
+     "DefaultConnection": "Server=sql-productssales-dev.database.windows.net;Database=ProductsSalesDb;User ID=sqladmin;Password=TuPassword;Encrypt=True;TrustServerCertificate=False;"
+   }
+   ```
+
+2. **Permitir tu IP en el firewall** de Azure SQL:
+   ```bash
+   az sql server firewall-rule create --resource-group rg-productssales-dev --server sql-productssales-dev --name AllowMyIP --start-ip-address TU_IP --end-ip-address TU_IP
+   ```
+
+3. **Ejecutar migraciones**:
+   ```bash
+   cd c:\ProductSales\ProductsSales
+   dotnet ef database update --project ProductsSales.Infrastructure --startup-project ProductsSales.Api
+   ```
+
+4. **Ejecutar la API**:
+   ```bash
+   cd c:\ProductSales\ProductsSales
+   dotnet run --project ProductsSales.Api
    ```
 
 ### Opción 2: Ejecución con Docker
@@ -81,8 +115,8 @@ ProductsSales/
 
 3. **Ejecutar la aplicación de escritorio**
    ```bash
-   cd ProductsSales.WinForms
-   dotnet run
+   cd c:\ProductSales\ProductsSales
+   dotnet run --project ProductsSales.WinForms
    ```
    - La app se conectará a la API en `http://localhost:5134`
 
@@ -116,6 +150,21 @@ Al iniciar la API por primera vez se crea un usuario administrador:
 | GET    | `/api/sales/report`    | Reporte de ventas    |
 
 Los endpoints protegidos requieren el header `Authorization: Bearer {token}`.
+
+## Pruebas unitarias
+
+Desde la raíz del proyecto:
+
+```bash
+cd c:\ProductSales\ProductsSales
+dotnet test ProductsSales.Tests
+```
+
+Los tests cubren:
+- **ProductService**: CRUD de productos
+- **SaleService**: creación de ventas, validación de stock
+- **AuthService**: login con credenciales válidas/inválidas
+- **ProductValidators**: validación de DTOs (CreateProductDto, UpdateProductDto)
 
 ## Comandos Docker útiles
 
