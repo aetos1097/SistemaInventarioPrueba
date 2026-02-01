@@ -23,10 +23,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $false
 
 Write-Host "=== ProductsSales - Despliegue Bicep ===" -ForegroundColor Cyan
 Write-Host "Ubicacion: $Location" -ForegroundColor Gray
 Write-Host "Ambiente: $Environment" -ForegroundColor Gray
+if ($SqlOnly) {
+    Write-Host "Modo: Solo SQL (sin App Service)" -ForegroundColor Yellow
+}
 Write-Host ""
 
 # Validar que Azure CLI esta instalado
@@ -43,7 +47,7 @@ if (-not $account) {
 
 # Validar plantilla Bicep
 Write-Host "Validando plantilla Bicep..." -ForegroundColor Yellow
-az bicep build --file main.bicep
+az bicep build --file main.bicep --only-show-errors
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Error al validar la plantilla Bicep"
 }
@@ -51,8 +55,10 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Plantilla validada correctamente." -ForegroundColor Green
 Write-Host ""
 
+# Bicep espera "true"/"false" en minúsculas; PowerShell convierte $false a "False"
 $deployAppService = -not $SqlOnly
-$deployParams = "location=$Location", "environment=$Environment", "deployAppService=$deployAppService", "sqlAdminPassword=$SqlPassword", "jwtSecretKey=$JwtSecret"
+$deployAppServiceBicep = $deployAppService.ToString().ToLowerInvariant()
+$deployParams = "location=$Location", "environment=$Environment", "deployAppService=$deployAppServiceBicep", "sqlAdminPassword=$SqlPassword", "jwtSecretKey=$JwtSecret"
 $deploymentName = "productssales-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 
 if ($WhatIf) {
@@ -71,6 +77,7 @@ if ($WhatIf) {
         --location $Location `
         --template-file main.bicep `
         --parameters $deployParams `
+        --only-show-errors `
         --output json 2>&1
     
     if ($LASTEXITCODE -eq 0) {

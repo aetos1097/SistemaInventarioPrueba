@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "9455029880031289296"
+      "templateHash": "12840928502034916096"
     }
   },
   "parameters": {
@@ -32,14 +33,14 @@
       "type": "securestring"
     }
   },
-  "resources": [
-    {
+  "resources": {
+    "rg": {
       "type": "Microsoft.Resources/resourceGroups",
       "apiVersion": "2023-07-01",
       "name": "[format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))]",
       "location": "[parameters('location')]"
     },
-    {
+    "sql": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "sql-deployment",
@@ -153,10 +154,10 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}-{1}', parameters('projectName'), parameters('environment')))]"
+        "rg"
       ]
     },
-    {
+    "webApp": {
       "condition": "[parameters('deployAppService')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -178,7 +179,7 @@
             "value": "[format('api-{0}-{1}', parameters('projectName'), parameters('environment'))]"
           },
           "connectionString": {
-            "value": "[format('Server=tcp:{0},1433;Initial Catalog={1};Persist Security Info=False;User ID={2};Password={3};MultipleActiveResultSets=True;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.sqlServerFqdn.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.databaseName.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.administratorLogin.value, parameters('sqlAdminPassword'))]"
+            "value": "[format('Server=tcp:{0},1433;Initial Catalog={1};Persist Security Info=False;User ID={2};Password={3};MultipleActiveResultSets=True;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', reference('sql').outputs.sqlServerFqdn.value, reference('sql').outputs.databaseName.value, reference('sql').outputs.administratorLogin.value, parameters('sqlAdminPassword'))]"
           },
           "jwtSecretKey": {
             "value": "[parameters('jwtSecretKey')]"
@@ -286,19 +287,21 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}-{1}', parameters('projectName'), parameters('environment')))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment')]"
+        "rg",
+        "sql"
       ]
     }
-  ],
+  },
   "outputs": {
     "webAppUrl": {
       "type": "string",
-      "value": "[if(parameters('deployAppService'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'webapp-deployment'), '2025-04-01').outputs.webAppUrl.value, '')]"
+      "nullable": true,
+      "value": "[if(parameters('deployAppService'), reference('webApp').outputs.webAppUrl.value, null())]"
     },
     "webAppName": {
       "type": "string",
-      "value": "[if(parameters('deployAppService'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'webapp-deployment'), '2025-04-01').outputs.webAppName.value, '')]"
+      "nullable": true,
+      "value": "[if(parameters('deployAppService'), reference('webApp').outputs.webAppName.value, null())]"
     },
     "resourceGroupName": {
       "type": "string",
@@ -306,7 +309,7 @@
     },
     "sqlServerFqdn": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.sqlServerFqdn.value]"
+      "value": "[reference('sql').outputs.sqlServerFqdn.value]"
     }
   }
 }

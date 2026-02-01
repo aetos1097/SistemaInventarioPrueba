@@ -47,7 +47,7 @@ module webApp 'modules/app-service.bicep' = if (deployAppService) {
   }
 }
 
-output webAppUrl string = deployAppService ? webApp.outputs.webAppUrl : ''
-output webAppName string = deployAppService ? webApp.outputs.webAppName : ''
+output webAppUrl string? = deployAppService ? webApp.outputs.webAppUrl : null
+output webAppName string? = deployAppService ? webApp.outputs.webAppName : null
 output resourceGroupName string = rg.name
 output sqlServerFqdn string = sql.outputs.sqlServerFqdn
