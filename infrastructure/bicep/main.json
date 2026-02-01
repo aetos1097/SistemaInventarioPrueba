@@ -1,0 +1,312 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.40.2.10011",
+      "templateHash": "9455029880031289296"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2"
+    },
+    "environment": {
+      "type": "string",
+      "defaultValue": "dev"
+    },
+    "projectName": {
+      "type": "string",
+      "defaultValue": "productssales"
+    },
+    "deployAppService": {
+      "type": "bool",
+      "defaultValue": true
+    },
+    "sqlAdminPassword": {
+      "type": "securestring"
+    },
+    "jwtSecretKey": {
+      "type": "securestring"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2023-07-01",
+      "name": "[format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "sql-deployment",
+      "resourceGroup": "[format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "sqlServerName": {
+            "value": "[format('sql-{0}-{1}', parameters('projectName'), parameters('environment'))]"
+          },
+          "databaseName": {
+            "value": "ProductsSalesDb"
+          },
+          "administratorLogin": {
+            "value": "sqladmin"
+          },
+          "administratorLoginPassword": {
+            "value": "[parameters('sqlAdminPassword')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "3517232493678076057"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "sqlServerName": {
+              "type": "string"
+            },
+            "databaseName": {
+              "type": "string"
+            },
+            "administratorLogin": {
+              "type": "string"
+            },
+            "administratorLoginPassword": {
+              "type": "securestring"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Sql/servers",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[parameters('sqlServerName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "administratorLogin": "[parameters('administratorLogin')]",
+                "administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+                "version": "12.0"
+              }
+            },
+            {
+              "type": "Microsoft.Sql/servers/databases",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}', parameters('sqlServerName'), parameters('databaseName'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Basic",
+                "tier": "Basic",
+                "capacity": 5
+              },
+              "properties": {
+                "collation": "SQL_Latin1_General_CP1_CI_AS",
+                "maxSizeBytes": 2147483648
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Sql/servers/firewallRules",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}', parameters('sqlServerName'), 'AllowAzureServices')]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "sqlServerFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Sql/servers', parameters('sqlServerName')), '2023-05-01-preview').fullyQualifiedDomainName]"
+            },
+            "databaseName": {
+              "type": "string",
+              "value": "[parameters('databaseName')]"
+            },
+            "administratorLogin": {
+              "type": "string",
+              "value": "[parameters('administratorLogin')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}-{1}', parameters('projectName'), parameters('environment')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployAppService')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "webapp-deployment",
+      "resourceGroup": "[format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appServicePlanName": {
+            "value": "[format('asp-{0}-{1}', parameters('projectName'), parameters('environment'))]"
+          },
+          "webAppName": {
+            "value": "[format('api-{0}-{1}', parameters('projectName'), parameters('environment'))]"
+          },
+          "connectionString": {
+            "value": "[format('Server=tcp:{0},1433;Initial Catalog={1};Persist Security Info=False;User ID={2};Password={3};MultipleActiveResultSets=True;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.sqlServerFqdn.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.databaseName.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.administratorLogin.value, parameters('sqlAdminPassword'))]"
+          },
+          "jwtSecretKey": {
+            "value": "[parameters('jwtSecretKey')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "6977234279152845214"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "appServicePlanName": {
+              "type": "string"
+            },
+            "webAppName": {
+              "type": "string"
+            },
+            "connectionString": {
+              "type": "securestring"
+            },
+            "jwtSecretKey": {
+              "type": "securestring"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2022-09-01",
+              "name": "[parameters('appServicePlanName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "F1",
+                "tier": "Free"
+              },
+              "kind": "linux",
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2022-09-01",
+              "name": "[parameters('webAppName')]",
+              "location": "[parameters('location')]",
+              "kind": "app,linux",
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+                "siteConfig": {
+                  "linuxFxVersion": "DOTNETCORE|8.0",
+                  "alwaysOn": false,
+                  "ftpsState": "FtpsOnly",
+                  "minTlsVersion": "1.2",
+                  "appSettings": [
+                    {
+                      "name": "ConnectionStrings__DefaultConnection",
+                      "value": "[parameters('connectionString')]"
+                    },
+                    {
+                      "name": "Jwt__SecretKey",
+                      "value": "[parameters('jwtSecretKey')]"
+                    },
+                    {
+                      "name": "Jwt__Issuer",
+                      "value": "ProductsSales.Api"
+                    },
+                    {
+                      "name": "Jwt__Audience",
+                      "value": "ProductsSales.Client"
+                    },
+                    {
+                      "name": "ASPNETCORE_ENVIRONMENT",
+                      "value": "Production"
+                    }
+                  ]
+                },
+                "httpsOnly": true
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "webAppUrl": {
+              "type": "string",
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2022-09-01').defaultHostName)]"
+            },
+            "webAppName": {
+              "type": "string",
+              "value": "[parameters('webAppName')]"
+            },
+            "webAppHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2022-09-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}-{1}', parameters('projectName'), parameters('environment')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "webAppUrl": {
+      "type": "string",
+      "value": "[if(parameters('deployAppService'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'webapp-deployment'), '2025-04-01').outputs.webAppUrl.value, '')]"
+    },
+    "webAppName": {
+      "type": "string",
+      "value": "[if(parameters('deployAppService'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'webapp-deployment'), '2025-04-01').outputs.webAppName.value, '')]"
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))]"
+    },
+    "sqlServerFqdn": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))), 'Microsoft.Resources/deployments', 'sql-deployment'), '2025-04-01').outputs.sqlServerFqdn.value]"
+    }
+  }
+}
