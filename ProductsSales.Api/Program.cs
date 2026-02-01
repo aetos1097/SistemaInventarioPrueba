@@ -12,6 +12,7 @@ using ProductsSales.Domain.Entities;
 using ProductsSales.Infrastructure.Data;
 using ProductsSales.Infrastructure.Repositories;
 using ProductsSales.Infrastructure.Security;
+using ProductsSales.Infrastructure.Services;
 using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -110,10 +111,19 @@ builder.Services.AddScoped<ISaleRepository, SaleRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IJwtService, JwtService>();
-builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<SaleService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<AuthService>();
+
+// Blob Storage: AzureBlobService si está configurado, si no NoOpBlobStorageService
+var sasUrl = builder.Configuration["AzureStorage:SasUrl"];
+builder.Services.AddScoped<IBlobStorageService>(sp =>
+{
+    if (!string.IsNullOrWhiteSpace(sasUrl))
+        return new AzureBlobService(builder.Configuration);
+    return new NoOpBlobStorageService();
+});
 
 builder.Services.AddValidatorsFromAssemblyContaining<LoginValidator>();
 

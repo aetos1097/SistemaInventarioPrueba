@@ -12,6 +12,7 @@ public partial class ProductEditForm : Form
     private NumericUpDown? _numStock;
     private TextBox? _txtImagePath;
     private Button? _btnSelectImage;
+    private Button? _btnClearImage;
     private Button? _btnSave;
 
     public ProductEditForm(ProductService productService, ProductDto? product = null)
@@ -41,8 +42,9 @@ public partial class ProductEditForm : Form
         _numStock = new NumericUpDown { Location = new Point(130, 98), Size = new Size(220, 20), Minimum = 0, Maximum = 999999 };
 
         var lblImage = new Label { Text = "Imagen:", Location = new Point(20, 140), Size = new Size(100, 20) };
-        _txtImagePath = new TextBox { Location = new Point(130, 138), Size = new Size(150, 20), ReadOnly = true };
-        _btnSelectImage = new Button { Text = "...", Location = new Point(290, 137), Size = new Size(30, 23) };
+        _txtImagePath = new TextBox { Location = new Point(130, 138), Size = new Size(120, 20), ReadOnly = true };
+        _btnSelectImage = new Button { Text = "...", Location = new Point(255, 137), Size = new Size(30, 23) };
+        _btnClearImage = new Button { Text = "Limpiar", Location = new Point(290, 137), Size = new Size(55, 23) };
 
         _btnSave = new Button { Text = "Guardar", Location = new Point(130, 180), Size = new Size(100, 30) };
         var btnCancel = new Button { Text = "Cancelar", Location = new Point(240, 180), Size = new Size(100, 30), DialogResult = DialogResult.Cancel };
@@ -55,7 +57,7 @@ public partial class ProductEditForm : Form
             _txtImagePath.Text = _product.ImagePath ?? string.Empty;
         }
 
-        this.Controls.AddRange(new Control[] { lblName, _txtName, lblPrice, _numPrice, lblStock, _numStock, lblImage, _txtImagePath, _btnSelectImage, _btnSave, btnCancel });
+        this.Controls.AddRange(new Control[] { lblName, _txtName, lblPrice, _numPrice, lblStock, _numStock, lblImage, _txtImagePath, _btnSelectImage, _btnClearImage, _btnSave, btnCancel });
         this.AcceptButton = _btnSave;
         this.CancelButton = btnCancel;
     }
@@ -68,13 +70,17 @@ public partial class ProductEditForm : Form
             {
                 using var dialog = new OpenFileDialog
                 {
-                    Filter = "Imágenes|*.jpg;*.jpeg;*.png;*.gif|Todos los archivos|*.*"
+                    Filter = "Imágenes|*.jpg;*.jpeg;*.png;*.gif;*.bmp;*.webp|Todos los archivos|*.*"
                 };
                 if (dialog.ShowDialog() == DialogResult.OK && _txtImagePath != null)
                 {
                     _txtImagePath.Text = dialog.FileName;
                 }
             };
+        }
+        if (_btnClearImage != null)
+        {
+            _btnClearImage.Click += (s, e) => { if (_txtImagePath != null) _txtImagePath.Text = string.Empty; };
         }
 
         if (_btnSave != null)
@@ -92,15 +98,22 @@ public partial class ProductEditForm : Form
                 {
                     if (_product == null)
                     {
+                        // Crear producto sin imagen (ImagePath=null)
                         var createDto = new CreateProductDto(
                             _txtName.Text,
                             _numPrice?.Value ?? 0,
                             (int)(_numStock?.Value ?? 0),
-                            string.IsNullOrWhiteSpace(_txtImagePath?.Text) ? null : _txtImagePath.Text
+                            null
                         );
                         var result = await _productService.CreateAsync(createDto);
                         if (result != null)
                         {
+                            // Si hay archivo local seleccionado, subir a Blob Storage
+                            var imagePath = _txtImagePath?.Text?.Trim();
+                            if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
+                            {
+                                await _productService.UploadImageAsync(result.Id, imagePath);
+                            }
                             MessageBox.Show("Producto creado correctamente", "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
                             this.DialogResult = DialogResult.OK;
                             this.Close();
@@ -112,11 +125,29 @@ public partial class ProductEditForm : Form
                     }
                     else
                     {
+                        string? imagePathToUse = null;
+                        var imagePath = _txtImagePath?.Text?.Trim();
+
+                        if (!string.IsNullOrEmpty(imagePath))
+                        {
+                            if (File.Exists(imagePath))
+                            {
+                                // Archivo local: subir a Blob Storage
+                                imagePathToUse = await _productService.UploadImageAsync(_product.Id, imagePath);
+                            }
+                            else
+                            {
+                                // URL existente (ya en Blob): mantener
+                                imagePathToUse = imagePath;
+                            }
+                        }
+                        // imagePathToUse = null si el usuario limpió la imagen
+
                         var updateDto = new UpdateProductDto(
                             _txtName.Text,
                             _numPrice?.Value ?? 0,
                             (int)(_numStock?.Value ?? 0),
-                            string.IsNullOrWhiteSpace(_txtImagePath?.Text) ? null : _txtImagePath.Text
+                            imagePathToUse
                         );
                         var result = await _productService.UpdateAsync(_product.Id, updateDto);
                         if (result != null)

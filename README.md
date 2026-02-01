@@ -6,6 +6,7 @@ Aplicación de escritorio para la gestión de productos y ventas, con API REST y
 
 - **Autenticación** con JWT (JSON Web Tokens)
 - **Gestión de productos** (CRUD): crear, listar, editar y eliminar productos
+- **Imágenes en Azure Blob Storage**: subida, actualización y eliminación de imágenes de productos
 - **Registro de ventas** con múltiples ítems por venta
 - **Reportes** de ventas con filtros por fecha y paginación
 - **Patrón de resiliencia** (Polly): reintentos automáticos y circuit breaker para llamadas HTTP
@@ -24,6 +25,7 @@ Aplicación de escritorio para la gestión de productos y ventas, con API REST y
 | Autenticación| JWT, BCrypt             |
 | Validación   | FluentValidation        |
 | Resiliencia  | Polly (Retry, Circuit Breaker) |
+| Almacenamiento | Azure Blob Storage (imágenes) |
 | Pruebas      | xUnit, Moq, FluentAssertions  |
 | IaC          | Bicep (Azure)                 |
 
@@ -145,11 +147,54 @@ Al iniciar la API por primera vez se crea un usuario administrador:
 | POST   | `/api/products`        | Crear producto       |
 | PUT    | `/api/products/{id}`   | Actualizar producto  |
 | DELETE | `/api/products/{id}`   | Eliminar producto    |
+| POST   | `/api/products/{id}/upload-image` | Subir imagen (multipart/form-data) |
 | GET    | `/api/sales`           | Listar ventas        |
 | POST   | `/api/sales`           | Registrar venta      |
 | GET    | `/api/sales/report`    | Reporte de ventas    |
 
 Los endpoints protegidos requieren el header `Authorization: Bearer {token}`.
+
+## Azure Blob Storage
+
+Las imágenes de productos se almacenan en Azure Blob Storage. El servicio se configura condicionalmente según la presencia de `AzureStorage:SasUrl`.
+
+### Configuración
+
+1. **Crear recurso en Azure**: Storage Account → Contenedor (ej. `productssales`)
+2. **Generar URL SAS** con permisos de lectura, escritura y eliminación (`sp=racwd`)
+3. **Añadir en** `ProductsSales.Api/appsettings.Development.json` o `appsettings.json`:
+
+   ```json
+   "AzureStorage": {
+     "SasUrl": "https://tu-cuenta.blob.core.windows.net/tu-contenedor?sp=racwd&st=..."
+   }
+   ```
+
+**Importante**: No subas la URL SAS a Git. Usa User Secrets o variables de entorno en producción.
+
+### Comportamiento
+
+| Estado | Implementación | Comportamiento |
+|--------|----------------|----------------|
+| `SasUrl` configurado | `AzureBlobService` | Sube/elimina imágenes en Blob Storage |
+| `SasUrl` vacío o ausente | `NoOpBlobStorageService` | Upload lanza; Delete no hace nada |
+
+### Uso en WinForms
+
+- **Crear/editar producto**: botón "..." para seleccionar imagen → Guardar → se sube a Blob
+- **Cambiar imagen**: seleccionar otra → Guardar → reemplaza la anterior en Blob
+- **Quitar imagen**: botón "Limpiar" → Guardar → elimina del Blob
+
+## Mock de Blob Storage (tests)
+
+En las pruebas unitarias se usa **Moq** para simular `IBlobStorageService`:
+
+- Los tests del `ProductsController` no realizan llamadas reales a Azure
+- Se comprueba que se invoca `DeleteImageAsync` al eliminar un producto con imagen
+- Se comprueba que no se llama a Blob cuando el producto no tiene imagen
+- `UploadImage` se prueba con un mock que devuelve una URL ficticia
+
+La interfaz `IBlobStorageService` permite sustituir la implementación real por mocks sin modificar el código de producción.
 
 ## Pruebas unitarias
 
@@ -165,6 +210,7 @@ Los tests cubren:
 - **SaleService**: creación de ventas, validación de stock
 - **AuthService**: login con credenciales válidas/inválidas
 - **ProductValidators**: validación de DTOs (CreateProductDto, UpdateProductDto)
+- **ProductsController**: integración con Blob Storage (upload, delete con mocks)
 
 ## Comandos Docker útiles
 

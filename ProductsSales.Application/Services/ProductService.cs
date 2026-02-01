@@ -4,7 +4,10 @@ using ProductsSales.Domain.Entities;
 
 namespace ProductsSales.Application.Services;
 
-public class ProductService
+/// <summary>
+/// Implementación del servicio de productos. CRUD y actualización de imagen.
+/// </summary>
+public class ProductService : IProductService
 {
     private readonly IProductRepository _productRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -67,6 +70,20 @@ public class ProductService
     public async Task<bool> DeleteProductAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await _productRepository.DeleteAsync(id, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>Actualiza la URL de imagen del producto (ej. tras subir a Azure Blob).</summary>
+    public async Task<bool> UpdateImageUrlAsync(Guid id, string imageUrl, CancellationToken cancellationToken = default)
+    {
+        var product = await _productRepository.GetByIdAsync(id, cancellationToken);
+        if (product == null)
+            return false;
+
+        product.ImagePath = imageUrl;
+        product.UpdatedAt = DateTime.UtcNow;
+        await _productRepository.UpdateAsync(product, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }

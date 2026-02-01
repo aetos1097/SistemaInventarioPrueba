@@ -1,4 +1,5 @@
 using ProductsSales.Application.DTOs;
+using ProductsSales.WinForms.Models;
 
 namespace ProductsSales.WinForms.Services;
 
@@ -35,5 +36,13 @@ public class ProductService
     public async Task DeleteAsync(Guid id)
     {
         await _apiClient.DeleteAsync($"api/products/{id}");
+    }
+
+    /// <summary>Sube una imagen al Blob Storage y actualiza el producto con la URL.</summary>
+    public async Task<string?> UploadImageAsync(Guid productId, string filePath)
+    {
+        var response = await _apiClient.PostFileAsync<UploadImageResponse>(
+            $"api/products/{productId}/upload-image", filePath);
+        return response?.ImageUrl;
     }
 }

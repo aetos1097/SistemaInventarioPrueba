@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductsSales.Application.DTOs;
+using ProductsSales.Application.Interfaces;
 using ProductsSales.Application.Services;
 
 namespace ProductsSales.Api.Controllers;
@@ -11,13 +12,15 @@ namespace ProductsSales.Api.Controllers;
 [Authorize]
 public class ProductsController : ControllerBase
 {
-    private readonly ProductService _productService;
+    private readonly IProductService _productService;
+    private readonly IBlobStorageService _blobService;
     private readonly IValidator<CreateProductDto> _createValidator;
     private readonly IValidator<UpdateProductDto> _updateValidator;
 
-    public ProductsController(ProductService productService, IValidator<CreateProductDto> createValidator, IValidator<UpdateProductDto> updateValidator)
+    public ProductsController(IProductService productService, IBlobStorageService blobService, IValidator<CreateProductDto> createValidator, IValidator<UpdateProductDto> updateValidator)
     {
         _productService = productService;
+        _blobService = blobService;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
     }
@@ -63,6 +66,13 @@ public class ProductsController : ControllerBase
             return BadRequest(new { errors = validationResult.Errors.Select(e => e.ErrorMessage) });
         }
 
+        // Si se limpia la imagen, eliminar del Blob Storage
+        var existing = await _productService.GetProductByIdAsync(id);
+        if (existing != null && !string.IsNullOrEmpty(existing.ImagePath) && string.IsNullOrEmpty(dto.ImagePath))
+        {
+            await _blobService.DeleteImageAsync(existing.ImagePath);
+        }
+
         var product = await _productService.UpdateProductAsync(id, dto);
         if (product == null)
         {
@@ -75,13 +85,44 @@ public class ProductsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteProduct(Guid id)
     {
+        var product = await _productService.GetProductByIdAsync(id);
+        if (product == null)
+            return NotFound(new { error = "Product not found" });
+
         var result = await _productService.DeleteProductAsync(id);
         if (!result)
-        {
             return NotFound(new { error = "Product not found" });
-        }
+
+        if (!string.IsNullOrEmpty(product.ImagePath))
+            await _blobService.DeleteImageAsync(product.ImagePath);
 
         return NoContent();
+    }
+
+    [HttpPost("{id}/upload-image")]
+    public async Task<IActionResult> UploadImage(Guid id, IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "No se ha proporcionado ningún archivo" });
+
+        var product = await _productService.GetProductByIdAsync(id);
+        if (product == null)
+            return NotFound(new { error = "Product not found" });
+
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(extension))
+            return BadRequest(new { error = "Tipo de archivo no permitido" });
+
+        if (!string.IsNullOrEmpty(product.ImagePath))
+            await _blobService.DeleteImageAsync(product.ImagePath);
+
+        using var stream = file.OpenReadStream();
+        var imageUrl = await _blobService.UploadImageAsync(stream, file.FileName);
+
+        await _productService.UpdateImageUrlAsync(id, imageUrl);
+
+        return Ok(new { imageUrl });
     }
 }
 

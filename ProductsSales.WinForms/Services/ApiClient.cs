@@ -198,6 +198,63 @@ public class ApiClient
         }
     }
 
+    /// <summary>Envía un archivo como multipart/form-data al endpoint. Devuelve la respuesta parseada.</summary>
+    public async Task<T?> PostFileAsync<T>(string endpoint, string filePath, string formFieldName = "file")
+    {
+        try
+        {
+            var fileStream = File.OpenRead(filePath);
+            var fileName = Path.GetFileName(filePath);
+            var streamContent = new StreamContent(fileStream);
+            var content = new MultipartFormDataContent();
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue(GetContentType(fileName));
+            content.Add(streamContent, formFieldName, fileName);
+
+            var response = await ExecuteWithResilienceAsync(async ct =>
+            {
+                var result = await _httpClient.PostAsync(endpoint, content, ct);
+                return result;
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException($"Error: {response.StatusCode} - {error}");
+            }
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(responseContent))
+                return default;
+
+            return JsonSerializer.Deserialize<T>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new Exception($"Error al comunicarse con la API en {endpoint}: {ex.Message}", ex);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new Exception($"Timeout al conectar con la API. Verifica que la API esté ejecutándose en {_baseUrl}");
+        }
+    }
+
+    private static string GetContentType(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+    }
+
     public async Task DeleteAsync(string endpoint)
     {
         try
